@@ -1,0 +1,195 @@
+:root {
+    --bg-main: #f8fafc;
+    --card-bg: #ffffff;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --primary: #3b82f6;
+    --primary-dark: #1d4ed8;
+    --danger: #ef4444;
+    --success: #10b981;
+    --border-color: #cbd5e1;
+    
+    /* Excel Colors */
+    --excel-green: #4f81bd; /* just naming, we use actual colors below */
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-main);
+}
+
+.dashboard-container {
+    max-width: 1500px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1.5rem;
+}
+
+header h1 {
+    font-size: 2rem;
+    margin: 0 0 0.5rem 0;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.status-badge {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.btn-primary {
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1.25rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgb(0 0 0 / 0.1);
+    transition: background-color 0.2s, opacity 0.2s;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-dark);
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.card {
+    background: var(--card-bg);
+    padding: 1.75rem;
+    border-radius: 1rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+    border: 1px solid var(--border-color);
+}
+
+.card h3 {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.big-value {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin: 0.75rem 0 0 0;
+}
+
+.card.highlight {
+    background: linear-gradient(135deg, #2563eb, #60a5fa);
+    color: white;
+    border: none;
+}
+.card.highlight h3, .card.highlight .big-value { color: white; }
+
+/* Table specific styling for Excel look */
+.table-card {
+    background: var(--card-bg);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgb(0 0 0 / 0.05);
+    border: 1px solid var(--border-color);
+    margin-bottom: 1.5rem;
+    display: flex;
+    overflow: hidden;
+}
+
+.table-card.mt-0 {
+    margin-top: -1rem; /* bring realist closer to optimist */
+}
+
+.section-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    text-align: center;
+    padding: 2rem 0.5rem;
+    font-weight: bold;
+    color: white;
+    font-size: 1.2rem;
+    letter-spacing: 2px;
+}
+
+.bg-green { background-color: #548235; }
+.bg-orange { background-color: #c55a11; }
+.bg-blue { background-color: #2e75b6; }
+
+.table-wrapper {
+    flex-grow: 1;
+    overflow-x: auto;
+    padding: 1rem 1.5rem;
+}
+
+.table-wrapper h3 {
+    margin-top: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+th, td {
+    padding: 0.5rem 0.75rem;
+    text-align: right;
+    border: 1px solid var(--border-color);
+}
+
+th:first-child, td:first-child {
+    text-align: left;
+    font-weight: 500;
+    width: 120px;
+    background: #f8fafc;
+}
+
+th {
+    font-weight: 600;
+    background: #f1f5f9;
+}
+
+.section-plan th { background: #e2efda; }
+.section-fact th { background: #fce4d6; }
+.section-analysis th { background: #ddebf7; }
+
+/* Dynamic cell colors */
+.val-negative {
+    color: #b91c1c;
+    font-weight: 600;
+}
+.val-positive {
+    color: #15803d;
+    font-weight: 600;
+}

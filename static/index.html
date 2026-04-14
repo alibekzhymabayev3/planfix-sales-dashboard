@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Дашборд продаж | Техновид</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header>
+            <div class="header-content">
+                <h1>Аналитика Продаж</h1>
+                <p>Выполнение планов в сравнении с фактическими показателями (Planfix)</p>
+            </div>
+            <div class="header-actions">
+                <span class="status-badge" id="last-sync-time">Загрузка...</span>
+                <button id="btn-sync" class="btn-primary">🔄 Обновить данные</button>
+            </div>
+        </header>
+
+        <main>
+            <!-- Блок сводных карточек -->
+            <section class="summary-cards">
+                <div class="card premium">
+                    <h3>План Оптимист (М2)</h3>
+                    <p class="big-value" id="val-opt-m2">--</p>
+                </div>
+                <div class="card premium">
+                    <h3>План Реалист (М2)</h3>
+                    <p class="big-value" id="val-real-m2">--</p>
+                </div>
+                <div class="card premium highlight">
+                    <h3>ФАКТ (М2)</h3>
+                    <p class="big-value" id="val-fact-m2">--</p>
+                </div>
+            </section>
+
+            <!-- Таблицы как в Excel -->
+            <section class="data-tables">
+                
+                <!-- ПЛАНЫ ОПТИМИСТ -->
+                <div class="table-card section-plan">
+                    <div class="section-label bg-green">ПЛАНЫ</div>
+                    <div class="table-wrapper">
+                        <h3>План продаж "Оптимист"</h3>
+                        <table id="table-opt">
+                            <thead>
+                                <tr class="months-header"></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ПЛАНЫ РЕАЛИСТ -->
+                <div class="table-card section-plan mt-0">
+                    <div class="table-wrapper">
+                        <h3>План продаж "Реалист"</h3>
+                        <table id="table-real">
+                            <thead>
+                                <tr class="months-header"></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ФАКТ -->
+                <div class="table-card section-fact">
+                    <div class="section-label bg-orange">ФАКТ</div>
+                    <div class="table-wrapper">
+                        <h3>Факт Техновид</h3>
+                        <table id="table-fact">
+                            <thead>
+                                <tr class="months-header"></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- АНАЛИЗ -->
+                <div class="table-card section-analysis">
+                    <div class="section-label bg-blue">АНАЛИЗ</div>
+                    <div class="table-wrapper">
+                        <h3>Отклонение от плана "Оптимист"</h3>
+                        <table id="table-diff-opt">
+                            <thead>
+                                <tr class="months-header"></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                        
+                        <h3 style="margin-top:2rem;">Отклонение от плана "Реалист"</h3>
+                        <table id="table-diff-real">
+                            <thead>
+                                <tr class="months-header"></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </section>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
