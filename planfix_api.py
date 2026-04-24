@@ -173,6 +173,20 @@ async def fetch_planfix_fact():
                 aggregated[month][material]["m2"] += m2
                 aggregated[month][material]["sum"] += total_sum
 
+        # 5. Calculate derived СП (m2) based on formula: (Алюм + ПВХ) * 0.8
+        for month in aggregated:
+            m_data = aggregated[month]
+            alum_m2 = m_data.get("Алюм", {}).get("m2", 0.0)
+            pvc_m2 = m_data.get("ПВХ", {}).get("m2", 0.0)
+            
+            derived_sp_m2 = (alum_m2 + pvc_m2) * 0.8
+            
+            if "СП" not in m_data:
+                m_data["СП"] = {"m2": 0.0, "sum": 0.0}
+            
+            # We overwrite the m2 with the derived value, but keep the sum if any
+            m_data["СП"]["m2"] = derived_sp_m2
+
     print(f"DEBUG: Final CASCADE Aggregation: {aggregated}")
     return aggregated
     
