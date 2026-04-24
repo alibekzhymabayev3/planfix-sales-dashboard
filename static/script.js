@@ -186,12 +186,12 @@ function renderDashboard(sheetData, planfixData) {
     let moneyRealByMonth = {};
 
     for(let m = 1; m <= 12; m++) {
-        let valO = parseValue(sheetData[8][m + 1]); // Row 8 is money
+        let valO = parseValue(sheetData[7][m + 1]); // Row 7 is money (Optimist)
         moneyOptByMonth[m] = valO;
         moneyOptYear += valO;
         moneyRowOpt.innerHTML += `<td><strong>${formatNumber(valO)}</strong></td>`;
 
-        let valR = parseValue(sheetData[17][m + 1]); // Row 17 is money
+        let valR = parseValue(sheetData[16][m + 1]); // Row 16 is money (Realist)
         moneyRealByMonth[m] = valR;
         moneyRealYear += valR;
         moneyRowReal.innerHTML += `<td><strong>${formatNumber(valR)}</strong></td>`;
