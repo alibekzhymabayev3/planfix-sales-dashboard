@@ -225,9 +225,14 @@ function renderDashboard(sheetData, planfixData) {
     for(let m = 1; m <= 12; m++) {
         let fM = factMoneyByMonth[m];
         let oM = moneyOptByMonth[m];
-        let d = fM !== 0 || oM !== 0 ? fM - oM : 0;
-        diffMoneyOptYear += d;
-        diffMoneyOptRow.innerHTML += `<td class="${d < 0 ? 'val-negative' : (d > 0 ? 'val-positive' : '')}"><strong>${formatDiff(d)}</strong></td>`;
+        let hasFact = !!planfixData[m.toString()];
+        if (hasFact) {
+            let d = fM !== 0 || oM !== 0 ? fM - oM : 0;
+            diffMoneyOptYear += d;
+            diffMoneyOptRow.innerHTML += `<td class="${d < 0 ? 'val-negative' : (d > 0 ? 'val-positive' : '')}"><strong>${formatDiff(d)}</strong></td>`;
+        } else {
+            diffMoneyOptRow.innerHTML += `<td>-</td>`;
+        }
     }
     diffMoneyOptRow.innerHTML += `<td class="${diffMoneyOptYear < 0 ? 'val-negative' : ''}"><strong>${formatDiff(diffMoneyOptYear)}</strong></td>`;
     tbodyDiffOpt.appendChild(diffMoneyOptRow);
@@ -240,9 +245,14 @@ function renderDashboard(sheetData, planfixData) {
         for(let m = 1; m <= 12; m++) {
             let f = dataMap.fact[cat.name][m];
             let o = dataMap.opt[cat.name][m];
-            let doVal = f !== 0 || o !== 0 ? f - o : 0;
-            diffOptYear += doVal;
-            rDiffOpt.innerHTML += `<td class="${doVal < 0 ? 'val-negative' : (doVal > 0 ? 'val-positive' : '')}">${formatDiff(doVal)}</td>`;
+            let hasFact = !!planfixData[m.toString()];
+            if (hasFact) {
+                let doVal = f !== 0 || o !== 0 ? f - o : 0;
+                diffOptYear += doVal;
+                rDiffOpt.innerHTML += `<td class="${doVal < 0 ? 'val-negative' : (doVal > 0 ? 'val-positive' : '')}">${formatDiff(doVal)}</td>`;
+            } else {
+                rDiffOpt.innerHTML += `<td>-</td>`;
+            }
         }
         rDiffOpt.innerHTML += `<td class="${diffOptYear < 0 ? 'val-negative' : ''}"><strong>${formatDiff(diffOptYear)}</strong></td>`;
         tbodyDiffOpt.appendChild(rDiffOpt);
@@ -256,9 +266,14 @@ function renderDashboard(sheetData, planfixData) {
     for(let m = 1; m <= 12; m++) {
         let fM = factMoneyByMonth[m];
         let rM = moneyRealByMonth[m];
-        let d = fM !== 0 || rM !== 0 ? fM - rM : 0;
-        diffMoneyRealYear += d;
-        diffMoneyRealRow.innerHTML += `<td class="${d < 0 ? 'val-negative' : (d > 0 ? 'val-positive' : '')}"><strong>${formatDiff(d)}</strong></td>`;
+        let hasFact = !!planfixData[m.toString()];
+        if (hasFact) {
+            let d = fM !== 0 || rM !== 0 ? fM - rM : 0;
+            diffMoneyRealYear += d;
+            diffMoneyRealRow.innerHTML += `<td class="${d < 0 ? 'val-negative' : (d > 0 ? 'val-positive' : '')}"><strong>${formatDiff(d)}</strong></td>`;
+        } else {
+            diffMoneyRealRow.innerHTML += `<td>-</td>`;
+        }
     }
     diffMoneyRealRow.innerHTML += `<td class="${diffMoneyRealYear < 0 ? 'val-negative' : ''}"><strong>${formatDiff(diffMoneyRealYear)}</strong></td>`;
     tbodyDiffReal.appendChild(diffMoneyRealRow);
@@ -271,13 +286,75 @@ function renderDashboard(sheetData, planfixData) {
         for(let m = 1; m <= 12; m++) {
             let f = dataMap.fact[cat.name][m];
             let r = dataMap.real[cat.name][m];
-            let drVal = f !== 0 || r !== 0 ? f - r : 0;
-            diffRealYear += drVal;
-            rDiffReal.innerHTML += `<td class="${drVal < 0 ? 'val-negative' : (drVal > 0 ? 'val-positive' : '')}">${formatDiff(drVal)}</td>`;
+            let hasFact = !!planfixData[m.toString()];
+            if (hasFact) {
+                let drVal = f !== 0 || r !== 0 ? f - r : 0;
+                diffRealYear += drVal;
+                rDiffReal.innerHTML += `<td class="${drVal < 0 ? 'val-negative' : (drVal > 0 ? 'val-positive' : '')}">${formatDiff(drVal)}</td>`;
+            } else {
+                rDiffReal.innerHTML += `<td>-</td>`;
+            }
         }
         rDiffReal.innerHTML += `<td class="${diffRealYear < 0 ? 'val-negative' : ''}"><strong>${formatDiff(diffRealYear)}</strong></td>`;
         tbodyDiffReal.appendChild(rDiffReal);
     });
+    // CUMULATIVE TABLES
+    const tbodyCumulative = document.querySelector('#table-cumulative tbody');
+    if (tbodyCumulative) {
+        tbodyCumulative.innerHTML = '';
+        
+        // Cumulative Opt
+        let cumOptRow = document.createElement('tr');
+        cumOptRow.style.background = '#e2efda';
+        cumOptRow.innerHTML = `<td><strong>План Оптимист, в тенге</strong></td>`;
+        let cumOpt = 0;
+        for(let m = 1; m <= 12; m++) {
+            cumOpt += moneyOptByMonth[m] || 0;
+            cumOptRow.innerHTML += `<td><strong>${formatNumber(cumOpt)}</strong></td>`;
+        }
+        cumOptRow.innerHTML += `<td><strong>${formatNumber(cumOpt)}</strong></td>`;
+        tbodyCumulative.appendChild(cumOptRow);
+
+        // Cumulative Real
+        let cumRealRow = document.createElement('tr');
+        cumRealRow.style.background = '#ddebf7';
+        cumRealRow.innerHTML = `<td><strong>План Реалист, в тенге</strong></td>`;
+        let cumReal = 0;
+        for(let m = 1; m <= 12; m++) {
+            cumReal += moneyRealByMonth[m] || 0;
+            cumRealRow.innerHTML += `<td><strong>${formatNumber(cumReal)}</strong></td>`;
+        }
+        cumRealRow.innerHTML += `<td><strong>${formatNumber(cumReal)}</strong></td>`;
+        tbodyCumulative.appendChild(cumRealRow);
+
+        // Cumulative Fact
+        let cumFactRow = document.createElement('tr');
+        cumFactRow.style.background = '#fce4d6';
+        cumFactRow.innerHTML = `<td><strong>Факт Техновид, в тенге</strong></td>`;
+        let cumFact = 0;
+        let lastFactMonth = 0;
+        for(let m = 1; m <= 12; m++) {
+            if (!!planfixData[m.toString()]) {
+                lastFactMonth = m;
+            }
+        }
+
+        for(let m = 1; m <= 12; m++) {
+            if (m <= lastFactMonth) {
+                cumFact += factMoneyByMonth[m] || 0;
+                cumFactRow.innerHTML += `<td><strong>${formatNumber(cumFact)}</strong></td>`;
+            } else {
+                cumFactRow.innerHTML += `<td>-</td>`;
+            }
+        }
+        
+        if (lastFactMonth > 0) {
+            cumFactRow.innerHTML += `<td><strong>${formatNumber(cumFact)}</strong></td>`;
+        } else {
+            cumFactRow.innerHTML += `<td>-</td>`;
+        }
+        tbodyCumulative.appendChild(cumFactRow);
+    }
 
     document.getElementById('val-opt-m2').innerText = formatNumber(totalOpt);
     document.getElementById('val-real-m2').innerText = formatNumber(totalReal);
