@@ -20,7 +20,7 @@ async def get_tasks_signed_status(client, tasks_ids, headers, account):
         return {}
     
     status_map = {}
-    semaphore = asyncio.Semaphore(3) # Max 3 concurrent requests
+    semaphore = asyncio.Semaphore(25) # Max 3 concurrent requests
     
     async def check_task(t_id):
         t_id_str = str(t_id)
@@ -28,7 +28,7 @@ async def get_tasks_signed_status(client, tasks_ids, headers, account):
         async with semaphore:
             try:
                 # We'll put a small delay to be safe
-                await asyncio.sleep(0.05) 
+                await asyncio.sleep(0.01) 
                 res = await client.get(url, headers=headers)
                 if res.status_code == 200:
                     task_data = res.json().get('task', {})
@@ -78,24 +78,28 @@ async def fetch_planfix_fact():
         # 1. Fetch ALL analytic entries for 38590
         print("DEBUG: Fetching all analytic entries from datatag 38590...")
         url_an = f'https://{account}.planfix.com/rest/datatag/38590/entry/list'
+        fields_an = "id,task,customFieldData,148108,148110,148120,148122"
+
+        async def fetch_page(off):
+            res = await client.post(url_an, headers=headers,
+                                    json={"offset": off, "pageSize": 100, "fields": fields_an})
+            if res.status_code != 200:
+                print(f"ERROR: Analytic API returned {res.status_code}")
+                return []
+            return res.json().get('dataTagEntries', [])
+
+        # Параллельная пагинация волнами по 10 страниц (вместо последовательной).
         all_entries = []
-        offset = 0
+        page = 0
+        WAVE = 10
         while True:
-            payload_an = {
-                "offset": offset,
-                "pageSize": 100,
-                "fields": "id,task,customFieldData,148108,148110,148120,148122"
-            }
-            res_an = await client.post(url_an, headers=headers, json=payload_an)
-            if res_an.status_code != 200:
-                print(f"ERROR: Analytic API returned {res_an.status_code}")
-                break
-            
-            entries = res_an.json().get('dataTagEntries', [])
-            if not entries: break
-            all_entries.extend(entries)
-            offset += 100
-            if len(entries) < 100: break
+            offsets = [(page + i) * 100 for i in range(WAVE)]
+            pages = await asyncio.gather(*(fetch_page(o) for o in offsets))
+            for entries in pages:
+                all_entries.extend(entries)
+            if any(len(entries) < 100 for entries in pages):
+                break          # достигли конца (есть неполная/пустая страница)
+            page += WAVE
 
         print(f"DEBUG: Found {len(all_entries)} analytic entries total.")
 

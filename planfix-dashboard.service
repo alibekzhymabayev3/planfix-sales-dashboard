@@ -1,0 +1,14 @@
+[Unit]
+Description=Planfix Sales Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=a.lobanov
+WorkingDirectory=/data/home/a.lobanov/planfix-sales-dashboard
+ExecStart=/usr/bin/python3 /data/home/a.lobanov/planfix-sales-dashboard/app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
