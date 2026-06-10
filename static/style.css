@@ -254,3 +254,36 @@ th {
     color: #15803d;
     font-weight: 600;
 }
+
+/* Фиксированная раскладка таблиц — месяцы выровнены строго по колонкам */
+#v2-table-fact,
+#v2-table-opt,
+#v2-table-cumulative-fact,
+#v2-table-cumulative-opt {
+    table-layout: fixed;
+    width: 100%;
+}
+
+#v2-table-fact th,    #v2-table-fact td,
+#v2-table-opt th,     #v2-table-opt td,
+#v2-table-cumulative-fact th, #v2-table-cumulative-fact td,
+#v2-table-cumulative-opt th,  #v2-table-cumulative-opt td {
+    width: 115px;
+    min-width: 115px;
+    white-space: nowrap;
+}
+
+/* Первая колонка (название показателя) — шире */
+#v2-table-fact th:first-child,    #v2-table-fact td:first-child,
+#v2-table-opt th:first-child,     #v2-table-opt td:first-child,
+#v2-table-cumulative-fact th:first-child, #v2-table-cumulative-fact td:first-child,
+#v2-table-cumulative-opt th:first-child,  #v2-table-cumulative-opt td:first-child {
+    width: 180px;
+    min-width: 180px;
+}
+
+/* Заголовок месяцев */
+.months-header th {
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+}
