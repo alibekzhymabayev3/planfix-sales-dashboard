@@ -85,6 +85,7 @@ function renderDashboard(sheetData, planfixData) {
     if (!sheetData || !planfixData) return;
     renderDashboardV2(sheetData, planfixData);
     renderDashboardV1(sheetData, planfixData);
+    renderDashboardV3(sheetData, planfixData);
 }
 
 // ============================================================
@@ -482,4 +483,142 @@ function renderDashboardV1(sheetData, planfixData) {
     document.getElementById('v1-val-opt-m2').innerText  = formatNumber(totalOpt);
     document.getElementById('v1-val-real-m2').innerText = formatNumber(totalReal);
     document.getElementById('v1-val-fact-m2').innerText = formatNumber(totalFact);
+}
+
+// ============================================================
+// ВКЛАДКА V3 — СВОДНАЯ
+// ============================================================
+function renderDashboardV3(sheetData, planfixData) {
+    const categories = [
+        {name: "Алюм, м2", optRow: 3, planfixName: "Алюм"},
+        {name: "ПВХ, м2",  optRow: 4, planfixName: "ПВХ"},
+        {name: "СП, м2",   optRow: 5, planfixName: "СП"},
+        {name: "НВФ, м2",  optRow: 6, planfixName: "НВФ"}
+    ];
+
+    const MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь",
+                    "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+
+    // заголовок месяцев для сводной таблицы
+    const trHead = document.querySelector('#v3-table-summary thead tr.months-header');
+    if (trHead) {
+        trHead.innerHTML =
+            `<th style="min-width:180px;text-align:left;white-space:nowrap;">Показатель</th>` +
+            MONTHS.map(m => `<th style="min-width:115px;text-align:right;white-space:nowrap;">${m}</th>`).join('') +
+            `<th style="min-width:115px;text-align:right;white-space:nowrap;font-weight:700;">Итого</th>`;
+    }
+
+    // предрасчёт денег по месяцам
+    let factMoneyByMonth = {};
+    let optMoneyByMonth  = {};
+    let lastFactMonth = 0;
+    for (let m = 1; m <= 12; m++) {
+        factMoneyByMonth[m] = 0;
+        categories.forEach(cat => {
+            if (planfixData[m.toString()] && planfixData[m.toString()][cat.planfixName]) {
+                factMoneyByMonth[m] += planfixData[m.toString()][cat.planfixName].sum || 0;
+            }
+        });
+        optMoneyByMonth[m] = parseValue(sheetData[7][m + 1]);
+        if (planfixData[m.toString()]) lastFactMonth = m;
+    }
+
+    // ── ТАБЛИЦА 1: 4 строки (факт / план / факт накопит. / план накопит.) ──
+    const tbody = document.querySelector('#v3-table-summary tbody');
+    tbody.innerHTML = '';
+
+    function makeMoneyRow(label, valFn, bg) {
+        const tr = document.createElement('tr');
+        tr.style.background = bg;
+        let total = 0;
+        tr.innerHTML = `<td><strong>${label}</strong></td>`;
+        for (let m = 1; m <= 12; m++) {
+            const v = valFn(m);
+            total += v;
+            tr.innerHTML += `<td style="text-align:right"><strong>${formatNumber(v)}</strong></td>`;
+        }
+        tr.innerHTML += `<td style="text-align:right"><strong>${formatNumber(total)}</strong></td>`;
+        return tr;
+    }
+
+    tbody.appendChild(makeMoneyRow('Факт Техновид, в тенге', m => factMoneyByMonth[m], '#fce4d6'));
+    tbody.appendChild(makeMoneyRow('План, в тенге', m => optMoneyByMonth[m], '#e6f4ea'));
+
+    // факт накопительный (только до последнего месяца с фактом)
+    {
+        const tr = document.createElement('tr');
+        tr.style.background = '#fce4d6';
+        tr.innerHTML = `<td><strong>Факт накопительный, в тенге</strong></td>`;
+        let cum = 0;
+        for (let m = 1; m <= 12; m++) {
+            if (m <= lastFactMonth) {
+                cum += factMoneyByMonth[m] || 0;
+                tr.innerHTML += `<td style="text-align:right"><strong>${formatNumber(cum)}</strong></td>`;
+            } else {
+                tr.innerHTML += `<td style="text-align:right">-</td>`;
+            }
+        }
+        tr.innerHTML += lastFactMonth > 0
+            ? `<td style="text-align:right"><strong>${formatNumber(cum)}</strong></td>`
+            : `<td style="text-align:right">-</td>`;
+        tbody.appendChild(tr);
+    }
+
+    // план накопительный
+    {
+        const tr = document.createElement('tr');
+        tr.style.background = '#e2efda';
+        tr.innerHTML = `<td><strong>План накопительный, в тенге</strong></td>`;
+        let cum = 0;
+        for (let m = 1; m <= 12; m++) {
+            cum += optMoneyByMonth[m] || 0;
+            tr.innerHTML += `<td style="text-align:right"><strong>${formatNumber(cum)}</strong></td>`;
+        }
+        tr.innerHTML += `<td style="text-align:right"><strong>${formatNumber(cum)}</strong></td>`;
+        tbody.appendChild(tr);
+    }
+
+    // ── ТАБЛИЦА 2: годовая квадратура — факт / план / разница ──
+    const tbodyYear = document.querySelector('#v3-table-year-m2 tbody');
+    tbodyYear.innerHTML = '';
+
+    let grandFact = 0, grandPlan = 0;
+
+    categories.forEach(cat => {
+        let factYear = 0, planYear = 0;
+        for (let m = 1; m <= 12; m++) {
+            if (planfixData[m.toString()] && planfixData[m.toString()][cat.planfixName]) {
+                factYear += planfixData[m.toString()][cat.planfixName].m2 || 0;
+            }
+            planYear += parseValue(sheetData[cat.optRow][m + 1]);
+        }
+        grandFact += factYear;
+        grandPlan += planYear;
+
+        const diff = factYear - planYear;
+        const pct  = planYear > 0 ? Math.round((factYear / planYear) * 100) : 0;
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+            `<td>${cat.name}</td>` +
+            `<td style="text-align:right">${formatNumber(factYear)}</td>` +
+            `<td style="text-align:right">${formatNumber(planYear)}</td>` +
+            `<td style="text-align:right; color:${diff < 0 ? '#c0392b' : '#1e7e34'}">${formatDiff(diff)}</td>` +
+            `<td style="text-align:right">${pct > 0 ? pct + '%' : '-'}</td>`;
+        tbodyYear.appendChild(tr);
+    });
+
+    // итоговая строка
+    {
+        const diff = grandFact - grandPlan;
+        const pct  = grandPlan > 0 ? Math.round((grandFact / grandPlan) * 100) : 0;
+        const tr = document.createElement('tr');
+        tr.style.background = '#dce6f1';
+        tr.innerHTML =
+            `<td><strong>Итого за год</strong></td>` +
+            `<td style="text-align:right"><strong>${formatNumber(grandFact)}</strong></td>` +
+            `<td style="text-align:right"><strong>${formatNumber(grandPlan)}</strong></td>` +
+            `<td style="text-align:right; color:${diff < 0 ? '#c0392b' : '#1e7e34'}"><strong>${formatDiff(diff)}</strong></td>` +
+            `<td style="text-align:right"><strong>${pct > 0 ? pct + '%' : '-'}</strong></td>`;
+        tbodyYear.appendChild(tr);
+    }
 }

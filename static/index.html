@@ -26,6 +26,7 @@
         <nav class="tab-navigation">
             <button class="tab-btn active" data-tab="v2">📊 Основной фокус (v2)</button>
             <button class="tab-btn" data-tab="v1">📁 Полная аналитика (v1)</button>
+            <button class="tab-btn" data-tab="v3">💰 Сводная (v3)</button>
         </nav>
 
         <main>
@@ -198,6 +199,45 @@
                             <table id="v1-table-diff-real">
                                 <thead>
                                     <tr class="months-header"></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ================= ВКЛАДКА V3 (СВОДНАЯ) ================= -->
+            <div id="tab-content-v3" class="tab-content">
+                <section class="data-tables">
+                    <!-- 1. СВОДНАЯ: ФАКТ / ПЛАН / НАКОПИТЕЛЬНО (в тенге) -->
+                    <div class="table-card section-summary">
+                        <div class="section-label bg-blue">СВОДНАЯ</div>
+                        <div class="table-wrapper">
+                            <h3>1. Факт и План (в тенге)</h3>
+                            <table id="v3-table-summary">
+                                <thead>
+                                    <tr class="months-header"></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 2. ГОДОВОЙ ИТОГ: КВАДРАТУРА -->
+                    <div class="table-card section-summary">
+                        <div class="section-label bg-blue">ГОД</div>
+                        <div class="table-wrapper">
+                            <h3>2. Квадратура за год (м²)</h3>
+                            <table id="v3-table-year-m2">
+                                <thead>
+                                    <tr>
+                                        <th style="min-width:180px;text-align:left;">Показатель</th>
+                                        <th style="min-width:150px;text-align:right;">Факт, м²</th>
+                                        <th style="min-width:150px;text-align:right;">План, м²</th>
+                                        <th style="min-width:150px;text-align:right;">Разница, м²</th>
+                                        <th style="min-width:150px;text-align:right;">Выполнение</th>
+                                    </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>

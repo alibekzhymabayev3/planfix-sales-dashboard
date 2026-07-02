@@ -240,6 +240,7 @@ th {
 }
 
 .section-plan th { background: #e2efda; }
+.section-summary th { background: #dce6f1; }
 .section-fact th { background: #fce4d6; }
 .section-cumulative-fact th { background: #fce4d6; }
 .section-cumulative-opt th { background: #e2efda; }
