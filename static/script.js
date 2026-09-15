@@ -157,15 +157,15 @@ function renderFunnel(entries) {
         const monthObj = months.get(m);
         const buckets = [...monthObj.buckets.entries()].sort((a, b) => a[1].order - b[1].order);
 
-        let monthSum = 0, monthM2 = 0;
+        let monthSum = 0, monthM2 = 0, monthAdv = 0;
         const monthTaskIds = new Set();
         let bucketsHtml = '';
 
         buckets.forEach(([bucketKey, b]) => {
-            let bucketSum = 0, bucketM2 = 0;
+            let bucketSum = 0, bucketM2 = 0, bucketAdv = 0;
             const bucketTaskIds = new Set();
             const rowsHtml = b.rows.map(r => {
-                bucketSum += r.sum; bucketM2 += r.m2;
+                bucketSum += r.sum; bucketM2 += r.m2; bucketAdv += (r.advance_sum || 0);
                 bucketTaskIds.add(r.task_id); monthTaskIds.add(r.task_id);
                 const probText = (r.probability === null || r.probability === undefined)
                     ? '—' : (Math.round(r.probability) + '%');
@@ -182,7 +182,7 @@ function renderFunnel(entries) {
                 </tr>`;
             }).join('');
 
-            monthSum += bucketSum; monthM2 += bucketM2;
+            monthSum += bucketSum; monthM2 += bucketM2; monthAdv += bucketAdv;
             // Счётчик — уникальные задачи (договоры), а не строки аналитики (одна задача
             // может дать несколько строк по разным материалам).
             const bucketMeta = bucketTaskIds.size === b.rows.length
@@ -195,7 +195,7 @@ function renderFunnel(entries) {
                         <span class="funnel-arrow">▶</span>
                         <span class="funnel-dot"></span>
                         <span class="funnel-node-title">${escapeHtml(b.label)}</span>
-                        <span class="funnel-node-meta">${bucketMeta} · ${formatNumber(bucketSum)} тг · ${formatNumber(bucketM2)} м²</span>
+                        <span class="funnel-node-meta">${bucketMeta} · ${formatNumber(bucketSum)} тг · аванс ${formatNumber(bucketAdv)} тг · ${formatNumber(bucketM2)} м²</span>
                     </div>
                     <div class="funnel-node-body">
                         <table class="drill-table funnel-table">
@@ -219,7 +219,7 @@ function renderFunnel(entries) {
                 <div class="funnel-node-header funnel-month-header" data-funnel-toggle>
                     <span class="funnel-arrow">▶</span>
                     <span class="funnel-node-title">${escapeHtml(monthObj.label)}</span>
-                    <span class="funnel-node-meta">${monthMeta} · ${formatNumber(monthSum)} тг · ${formatNumber(monthM2)} м²</span>
+                    <span class="funnel-node-meta">${monthMeta} · ${formatNumber(monthSum)} тг · аванс ${formatNumber(monthAdv)} тг · ${formatNumber(monthM2)} м²</span>
                 </div>
                 <div class="funnel-node-body">${bucketsHtml}</div>
             </div>`;
