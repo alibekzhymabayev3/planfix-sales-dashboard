@@ -27,6 +27,7 @@
             <button class="tab-btn active" data-tab="v2">📊 Основной фокус (v2)</button>
             <button class="tab-btn" data-tab="v1">📁 Полная аналитика (v1)</button>
             <button class="tab-btn" data-tab="v3">💰 Сводная (v3)</button>
+            <button class="tab-btn" data-tab="v4">🎯 Воронка вероятности (v4)</button>
         </nav>
 
         <main>
@@ -245,8 +246,37 @@
                     </div>
                 </section>
             </div>
+
+            <!-- ================= ВКЛАДКА V4 (ВОРОНКА ВЕРОЯТНОСТИ) ================= -->
+            <div id="tab-content-v4" class="tab-content">
+                <section class="data-tables">
+                    <div class="funnel-card">
+                        <div class="funnel-card-header">
+                            <h3>Воронка вероятности заключения договора — задачи 2026</h3>
+                            <div class="funnel-card-actions">
+                                <span class="status-badge" id="funnel-status">Загрузка…</span>
+                                <button id="btn-funnel-sync" class="btn-primary">🔄 Обновить воронку</button>
+                            </div>
+                        </div>
+                        <p class="drill-note">Реконструкция отчёта Planfix 764900 (аналитика 38590). Группировка: месяц оплаты аванса → вероятность → задачи. Одна задача может встречаться в нескольких строках (разные материалы).</p>
+                        <div id="funnel-tree"></div>
+                    </div>
+                </section>
+            </div>
         </main>
     </div>
+
+    <!-- ===== Модалка drill-down: из чего сложилось число ===== -->
+    <div id="drill-overlay">
+        <div id="drill-modal">
+            <div id="drill-header">
+                <h2 id="drill-title">Детализация</h2>
+                <button id="drill-close" title="Закрыть (Esc)">×</button>
+            </div>
+            <div id="drill-body"></div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

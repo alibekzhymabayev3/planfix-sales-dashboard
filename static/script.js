@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
+    loadFunnel();
 
     document.getElementById('btn-sync').addEventListener('click', () => {
         const btn = document.getElementById('btn-sync');
@@ -10,6 +11,17 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(res => res.json())
             .then(() => pollUpdate(before, 0))
             .catch(err => { console.error(err); pollUpdate(before, 0); });
+    });
+
+    document.getElementById('btn-funnel-sync').addEventListener('click', () => {
+        const btn = document.getElementById('btn-funnel-sync');
+        btn.disabled = true;
+        btn.innerText = 'Обновление…';
+        const before = window.funnelLastSync || null;
+        fetch('api/funnel/sync', { method: 'POST' })
+            .then(res => res.json())
+            .then(() => pollFunnelUpdate(before, 0))
+            .catch(err => { console.error(err); pollFunnelUpdate(before, 0); });
     });
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -27,6 +39,8 @@ function loadData() {
     fetch('api/data')
         .then(res => res.json())
         .then(data => {
+            window.PF_DETAILS = data.planfix_details || {};
+            window.PF_ACCOUNT = data.account || window.PF_ACCOUNT || 'tehnovid';
             renderDashboard(data.excel_sheet, data.planfix_fact);
             window.lastSyncValue = data.last_sync || null;
             if (data.last_sync) {
@@ -48,6 +62,8 @@ function pollUpdate(before, tries) {
         .then(data => {
             const updated = data.last_sync && data.last_sync !== before;
             if (updated) {
+                window.PF_DETAILS = data.planfix_details || {};
+                window.PF_ACCOUNT = data.account || window.PF_ACCOUNT || 'tehnovid';
                 renderDashboard(data.excel_sheet, data.planfix_fact);
                 window.lastSyncValue = data.last_sync;
                 document.getElementById('last-sync-time').innerText = 'Обновлено из Планфикса: ' + data.last_sync;
@@ -60,6 +76,159 @@ function pollUpdate(before, tries) {
             }
         })
         .catch(() => setTimeout(() => pollUpdate(before, tries + 1), 3000));
+}
+
+// ============================================================
+// ВКЛАДКА V4 — ВОРОНКА ВЕРОЯТНОСТИ
+// ============================================================
+function loadFunnel() {
+    fetch('api/funnel')
+        .then(res => res.json())
+        .then(data => {
+            window.funnelLastSync = data.last_sync || null;
+            window.PF_ACCOUNT = data.account || window.PF_ACCOUNT || 'tehnovid';
+            renderFunnel(data.entries || []);
+            const statusEl = document.getElementById('funnel-status');
+            const isEmpty = !(data.entries && data.entries.length);
+            if (data.last_sync) {
+                statusEl.innerText = 'Обновлено: ' + data.last_sync;
+            } else if (data.refreshing || isEmpty) {
+                // Холодный кэш (первый заход после старта сервера) — не оставляем
+                // пользователя с надписью «Загрузка…» навсегда, а сами опрашиваем
+                // до появления данных, как при ручном клике «Обновить воронку».
+                statusEl.innerText = 'Загрузка данных из Planfix…';
+                pollFunnelUpdate(data.last_sync || null, 0);
+            } else {
+                statusEl.innerText = 'Нет данных';
+            }
+        })
+        .catch(err => {
+            console.error("Error fetching funnel:", err);
+            document.getElementById('funnel-status').innerText = 'Ошибка загрузки';
+        });
+}
+
+function pollFunnelUpdate(before, tries) {
+    const btn = document.getElementById('btn-funnel-sync');
+    fetch('api/funnel')
+        .then(r => r.json())
+        .then(data => {
+            const updated = data.last_sync && data.last_sync !== before;
+            if (updated) {
+                window.funnelLastSync = data.last_sync;
+                window.PF_ACCOUNT = data.account || window.PF_ACCOUNT || 'tehnovid';
+                renderFunnel(data.entries || []);
+                document.getElementById('funnel-status').innerText = 'Обновлено: ' + data.last_sync;
+                btn.disabled = false; btn.innerText = '🔄 Обновить воронку';
+            } else if (tries >= 25) {
+                document.getElementById('funnel-status').innerText = 'Обновление идёт дольше обычного — данные появятся автоматически';
+                btn.disabled = false; btn.innerText = '🔄 Обновить воронку';
+            } else {
+                setTimeout(() => pollFunnelUpdate(before, tries + 1), 3000);
+            }
+        })
+        .catch(() => setTimeout(() => pollFunnelUpdate(before, tries + 1), 3000));
+}
+
+// entries: плоский список {task_id, task_name, customer, material, m2, sum, date,
+//   month, month_label, probability, bucket, bucket_label, bucket_order}
+function renderFunnel(entries) {
+    const container = document.getElementById('funnel-tree');
+    if (!entries || !entries.length) {
+        container.innerHTML = '<p class="drill-empty">Нет данных за 2026 год.</p>';
+        return;
+    }
+
+    // Группировка: месяц -> бакет вероятности -> строки
+    const months = new Map();
+    entries.forEach(e => {
+        if (!months.has(e.month)) months.set(e.month, { label: e.month_label, buckets: new Map() });
+        const monthObj = months.get(e.month);
+        if (!monthObj.buckets.has(e.bucket)) {
+            monthObj.buckets.set(e.bucket, { label: e.bucket_label, order: e.bucket_order, rows: [] });
+        }
+        monthObj.buckets.get(e.bucket).rows.push(e);
+    });
+
+    const sortedMonths = [...months.keys()].sort((a, b) => a - b);
+    let html = '';
+
+    sortedMonths.forEach(m => {
+        const monthObj = months.get(m);
+        const buckets = [...monthObj.buckets.entries()].sort((a, b) => a[1].order - b[1].order);
+
+        let monthSum = 0, monthM2 = 0;
+        const monthTaskIds = new Set();
+        let bucketsHtml = '';
+
+        buckets.forEach(([bucketKey, b]) => {
+            let bucketSum = 0, bucketM2 = 0;
+            const bucketTaskIds = new Set();
+            const rowsHtml = b.rows.map(r => {
+                bucketSum += r.sum; bucketM2 += r.m2;
+                bucketTaskIds.add(r.task_id); monthTaskIds.add(r.task_id);
+                const probText = (r.probability === null || r.probability === undefined)
+                    ? '—' : (Math.round(r.probability) + '%');
+                return `<tr>
+                    <td><a href="${taskUrl(r.task_id)}" target="_blank" rel="noopener">${escapeHtml(r.task_name)}</a></td>
+                    <td>${escapeHtml(r.customer || '')}</td>
+                    <td>${escapeHtml(r.material || '')}${r.material ? ' · ' : ''}${formatNumber(r.m2)} м²</td>
+                    <td style="text-align:right">${formatNumber(r.sum)} тг</td>
+                    <td class="funnel-bucket-${bucketKey}"><span class="funnel-dot"></span>${probText}</td>
+                </tr>`;
+            }).join('');
+
+            monthSum += bucketSum; monthM2 += bucketM2;
+            // Счётчик — уникальные задачи (договоры), а не строки аналитики (одна задача
+            // может дать несколько строк по разным материалам).
+            const bucketMeta = bucketTaskIds.size === b.rows.length
+                ? `${bucketTaskIds.size} задач`
+                : `${bucketTaskIds.size} задач · строк: ${b.rows.length}`;
+
+            bucketsHtml += `
+                <div class="funnel-node funnel-bucket-node funnel-bucket-${bucketKey}">
+                    <div class="funnel-node-header" data-funnel-toggle>
+                        <span class="funnel-arrow">▶</span>
+                        <span class="funnel-dot"></span>
+                        <span class="funnel-node-title">${escapeHtml(b.label)}</span>
+                        <span class="funnel-node-meta">${bucketMeta} · ${formatNumber(bucketSum)} тг · ${formatNumber(bucketM2)} м²</span>
+                    </div>
+                    <div class="funnel-node-body">
+                        <table class="drill-table funnel-table">
+                            <thead><tr>
+                                <th>Задача</th><th>Контрагент</th><th>Материал / Объём</th>
+                                <th>Сумма договора</th><th>Вероятность</th>
+                            </tr></thead>
+                            <tbody>${rowsHtml}</tbody>
+                        </table>
+                    </div>
+                </div>`;
+        });
+
+        const monthRowCount = buckets.reduce((acc, [, b]) => acc + b.rows.length, 0);
+        const monthMeta = monthTaskIds.size === monthRowCount
+            ? `${monthTaskIds.size} задач`
+            : `${monthTaskIds.size} задач · строк: ${monthRowCount}`;
+
+        html += `
+            <div class="funnel-node funnel-month-node">
+                <div class="funnel-node-header funnel-month-header" data-funnel-toggle>
+                    <span class="funnel-arrow">▶</span>
+                    <span class="funnel-node-title">${escapeHtml(monthObj.label)}</span>
+                    <span class="funnel-node-meta">${monthMeta} · ${formatNumber(monthSum)} тг · ${formatNumber(monthM2)} м²</span>
+                </div>
+                <div class="funnel-node-body">${bucketsHtml}</div>
+            </div>`;
+    });
+
+    container.innerHTML = html;
+
+    container.querySelectorAll('[data-funnel-toggle]').forEach(header => {
+        header.addEventListener('click', () => {
+            header.classList.toggle('open');
+            header.nextElementSibling.classList.toggle('open');
+        });
+    });
 }
 
 function parseValue(val) {
@@ -80,6 +249,140 @@ function formatDiff(val) {
     if (val > 0) return "+" + str;
     return str;
 }
+
+const MONTHS_RU = ["Январь","Февраль","Март","Апрель","Май","Июнь",
+                   "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+
+// ── Drill-down ──────────────────────────────────────────────
+// Формирует <td>. Если задан drillMat и значение != 0 — ячейка кликабельна
+// (открывает модалку с задачами, из которых сложилось число).
+function cellHtml(innerHtml, value, month, drillMat) {
+    if (drillMat && value && Math.round(value) !== 0) {
+        return `<td class="drillable" data-month="${month}" data-mat="${drillMat}" `
+             + `style="text-align:right">${innerHtml}</td>`;
+    }
+    return `<td style="text-align:right">${innerHtml}</td>`;
+}
+
+const PF_CATS = ["Алюм", "ПВХ", "СП", "НВФ"];
+
+// Собирает строки детализации для (month, material). month: '1'..'12' или 'year'.
+// material: конкретный материал или 'ALL' (тогда только 4 основные категории — как в деньгах факта).
+function collectDrillRows(month, material) {
+    const details = window.PF_DETAILS || {};
+    const months = (month === 'year') ? Array.from({length: 12}, (_, i) => String(i + 1)) : [String(month)];
+    const mats = (material === 'ALL') ? PF_CATS : [material];
+    const rows = [];
+    months.forEach(mk => {
+        const md = details[mk];
+        if (!md) return;
+        mats.forEach(mat => {
+            (md[mat] || []).forEach(r => rows.push(Object.assign({month: mk, mat: mat}, r)));
+        });
+    });
+    return rows;
+}
+
+function openDrill(month, material) {
+    const rows = collectDrillRows(month, material);
+    const monthLabel = (month === 'year') ? 'Итого за год' : (MONTHS_RU[parseInt(month, 10) - 1] || month);
+    const matLabel = (material === 'ALL') ? 'Все материалы' : material;
+
+    rows.sort((a, b) => (b.sum || 0) - (a.sum || 0));
+
+    let totM2 = 0, totSum = 0;
+    rows.forEach(r => { totM2 += (r.m2 || 0); totSum += (r.sum || 0); });
+
+    const body = document.getElementById('drill-body');
+    const title = document.getElementById('drill-title');
+    title.innerText = `Факт · ${matLabel} · ${monthLabel} 2026`;
+
+    // Квадратура СП в ячейке факта — производная величина (Алюм+ПВХ)*0.8, а не сумма
+    // построчных м² договоров со стеклопакетами — эти два числа расходятся, поэтому
+    // построчную/итоговую сумму м² для СП не показываем, только явную пометку.
+    const isSp = (material === 'СП');
+    let note = '';
+    if (isSp) {
+        note = `<p class="drill-note">⚠️ Квадратура СП в таблице рассчитывается по формуле (Алюм + ПВХ) × 0,8 `
+             + `и НЕ равна сумме м² по строкам ниже — колонка «Объём, м²» здесь скрыта во избежание путаницы. `
+             + `Договоры со стеклопакетами показаны для сверки суммы в тенге.</p>`;
+    }
+
+    if (!rows.length) {
+        body.innerHTML = note + `<p class="drill-empty">Нет договоров за этот период (данные ещё не загружены или ячейка пустая).</p>`;
+    } else {
+        const showMatCol = (material === 'ALL');
+        // Счётчик — уникальные задачи (договоры), а не строки детализации (одна задача
+        // может дать несколько строк по разным материалам).
+        const uniqueTaskCount = new Set(rows.map(r => r.task_id)).size;
+        const countLabel = uniqueTaskCount === rows.length
+            ? `${uniqueTaskCount}`
+            : `${uniqueTaskCount} · строк: ${rows.length}`;
+        let html = note + `<div class="drill-count">Договоров: <strong>${countLabel}</strong></div>`;
+        html += `<table class="drill-table"><thead><tr>`
+              + `<th style="text-align:left">Задача</th>`
+              + `<th style="text-align:left">Заказчик</th>`
+              + (showMatCol ? `<th style="text-align:left">Материал</th>` : ``)
+              + (isSp ? `` : `<th style="text-align:right">Объём, м²</th>`)
+              + `<th style="text-align:right">Сумма, тг</th>`
+              + `<th style="text-align:right">Мес.</th>`
+              + `<th style="text-align:left">Дата аванса</th>`
+              + `</tr></thead><tbody>`;
+        rows.forEach(r => {
+            const url = taskUrl(r.task_id);
+            html += `<tr>`
+                  + `<td style="text-align:left"><a href="${url}" target="_blank" rel="noopener">${escapeHtml(r.task_name)}</a></td>`
+                  + `<td style="text-align:left">${escapeHtml(r.customer || '—')}</td>`
+                  + (showMatCol ? `<td style="text-align:left">${escapeHtml(r.material_raw || r.mat)}</td>` : ``)
+                  + (isSp ? `` : `<td style="text-align:right">${formatNumber(r.m2 || 0)}</td>`)
+                  + `<td style="text-align:right">${formatNumber(r.sum || 0)}</td>`
+                  + `<td style="text-align:right">${(MONTHS_RU[parseInt(r.month,10)-1]||'').slice(0,3)}</td>`
+                  + `<td style="text-align:left">${escapeHtml(r.date || '')}</td>`
+                  + `</tr>`;
+        });
+        html += `</tbody><tfoot><tr>`
+              + `<td style="text-align:left"><strong>Итого</strong></td>`
+              + `<td></td>`
+              + (showMatCol ? `<td></td>` : ``)
+              + (isSp ? `` : `<td style="text-align:right"><strong>${formatNumber(totM2)}</strong></td>`)
+              + `<td style="text-align:right"><strong>${formatNumber(totSum)}</strong></td>`
+              + `<td colspan="2"></td>`
+              + `</tr></tfoot></table>`;
+        body.innerHTML = html;
+    }
+
+    document.getElementById('drill-overlay').classList.add('open');
+}
+
+function closeDrill() {
+    document.getElementById('drill-overlay').classList.remove('open');
+}
+
+// Строит ссылку на задачу Planfix из аккаунта, полученного от /api/data или /api/funnel
+// (фикс хардкода домена tehnovid.planfix.com). Фолбэк — 'tehnovid', если account не пришёл.
+function taskUrl(taskId) {
+    const account = window.PF_ACCOUNT || 'tehnovid';
+    return `https://${account}.planfix.com/task/${encodeURIComponent(taskId)}`;
+}
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// Делегирование кликов по кликабельным ячейкам + закрытие модалки
+document.addEventListener('click', (e) => {
+    const cell = e.target.closest('.drillable');
+    if (cell) {
+        openDrill(cell.getAttribute('data-month'), cell.getAttribute('data-mat'));
+        return;
+    }
+    if (e.target.id === 'drill-overlay' || e.target.closest('#drill-close')) {
+        closeDrill();
+    }
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrill(); });
 
 function renderDashboard(sheetData, planfixData) {
     if (!sheetData || !planfixData) return;
@@ -145,8 +448,10 @@ function renderDashboardV2(sheetData, planfixData) {
         totalOptMoney  += optMoneyByMonth[m];
     }
 
-    // helper: строим <tr> с числами по месяцам
-    function makeRow(label, valFn, style, bold) {
+    // helper: строим <tr> с числами по месяцам.
+    // drillMat: материал ('Алюм'/'ПВХ'/'СП'/'НВФ'/'ALL') → ячейки факта кликабельны (drill-down);
+    //           null → обычная строка (план), без drill.
+    function makeRow(label, valFn, style, bold, drillMat) {
         const tr = document.createElement('tr');
         if (style) tr.style.background = style;
         let yearTotal = 0;
@@ -155,9 +460,9 @@ function renderDashboardV2(sheetData, planfixData) {
         for (let m = 1; m <= 12; m++) {
             const v = valFn(m);
             yearTotal += v;
-            tr.innerHTML += `<td style="text-align:right">${wrap(formatNumber(v))}</td>`;
+            tr.innerHTML += cellHtml(wrap(formatNumber(v)), v, m, drillMat);
         }
-        tr.innerHTML += `<td style="text-align:right"><strong>${formatNumber(yearTotal)}</strong></td>`;
+        tr.innerHTML += cellHtml(`<strong>${formatNumber(yearTotal)}</strong>`, yearTotal, 'year', drillMat);
         return tr;
     }
 
@@ -165,7 +470,7 @@ function renderDashboardV2(sheetData, planfixData) {
     tbodyFact.appendChild(makeRow(
         'Факт Техновид, в тенге',
         m => factMoneyByMonth[m],
-        '#fce4d6', true
+        '#fce4d6', true, 'ALL'
     ));
     categories.forEach(cat => {
         tbodyFact.appendChild(makeRow(
@@ -173,7 +478,7 @@ function renderDashboardV2(sheetData, planfixData) {
             m => (planfixData[m.toString()] && planfixData[m.toString()][cat.planfixName])
                    ? planfixData[m.toString()][cat.planfixName].m2
                    : 0,
-            null, false
+            null, false, cat.planfixName
         ));
     });
 
@@ -306,12 +611,16 @@ function renderDashboardV1(sheetData, planfixData) {
 
             rOpt.innerHTML  += `<td>${formatNumber(optVal)}</td>`;
             rReal.innerHTML += `<td>${formatNumber(realVal)}</td>`;
-            rFact.innerHTML += `<td>${formatNumber(factVal)}</td>`;
+            rFact.innerHTML += (factVal && Math.round(factVal) !== 0)
+                ? `<td class="drillable" data-month="${m}" data-mat="${cat.planfixName}">${formatNumber(factVal)}</td>`
+                : `<td>${formatNumber(factVal)}</td>`;
         }
 
         rOpt.innerHTML  += `<td><strong>${formatNumber(optYearTotal)}</strong></td>`;
         rReal.innerHTML += `<td><strong>${formatNumber(realYearTotal)}</strong></td>`;
-        rFact.innerHTML += `<td><strong>${formatNumber(factYearTotal)}</strong></td>`;
+        rFact.innerHTML += (factYearTotal && Math.round(factYearTotal) !== 0)
+            ? `<td class="drillable" data-month="year" data-mat="${cat.planfixName}"><strong>${formatNumber(factYearTotal)}</strong></td>`
+            : `<td><strong>${formatNumber(factYearTotal)}</strong></td>`;
 
         tbodyOpt.appendChild(rOpt);
         tbodyReal.appendChild(rReal);
@@ -354,9 +663,13 @@ function renderDashboardV1(sheetData, planfixData) {
     for (let m = 1; m <= 12; m++) {
         let fM = factMoneyByMonth[m];
         moneyFactYear += fM;
-        moneyRowFact.innerHTML += `<td><strong>${formatNumber(fM)}</strong></td>`;
+        moneyRowFact.innerHTML += (fM && Math.round(fM) !== 0)
+            ? `<td class="drillable" data-month="${m}" data-mat="ALL"><strong>${formatNumber(fM)}</strong></td>`
+            : `<td><strong>${formatNumber(fM)}</strong></td>`;
     }
-    moneyRowFact.innerHTML += `<td><strong>${formatNumber(moneyFactYear)}</strong></td>`;
+    moneyRowFact.innerHTML += (moneyFactYear && Math.round(moneyFactYear) !== 0)
+        ? `<td class="drillable" data-month="year" data-mat="ALL"><strong>${formatNumber(moneyFactYear)}</strong></td>`
+        : `<td><strong>${formatNumber(moneyFactYear)}</strong></td>`;
     tbodyFact.insertBefore(moneyRowFact, tbodyFact.firstChild);
 
     // Отклонения — Оптимист
@@ -527,7 +840,7 @@ function renderDashboardV3(sheetData, planfixData) {
     const tbody = document.querySelector('#v3-table-summary tbody');
     tbody.innerHTML = '';
 
-    function makeMoneyRow(label, valFn, bg) {
+    function makeMoneyRow(label, valFn, bg, drillMat) {
         const tr = document.createElement('tr');
         tr.style.background = bg;
         let total = 0;
@@ -535,13 +848,13 @@ function renderDashboardV3(sheetData, planfixData) {
         for (let m = 1; m <= 12; m++) {
             const v = valFn(m);
             total += v;
-            tr.innerHTML += `<td style="text-align:right"><strong>${formatNumber(v)}</strong></td>`;
+            tr.innerHTML += cellHtml(`<strong>${formatNumber(v)}</strong>`, v, m, drillMat);
         }
-        tr.innerHTML += `<td style="text-align:right"><strong>${formatNumber(total)}</strong></td>`;
+        tr.innerHTML += cellHtml(`<strong>${formatNumber(total)}</strong>`, total, 'year', drillMat);
         return tr;
     }
 
-    tbody.appendChild(makeMoneyRow('Факт Техновид, в тенге', m => factMoneyByMonth[m], '#fce4d6'));
+    tbody.appendChild(makeMoneyRow('Факт Техновид, в тенге', m => factMoneyByMonth[m], '#fce4d6', 'ALL'));
     tbody.appendChild(makeMoneyRow('План, в тенге', m => optMoneyByMonth[m], '#e6f4ea'));
 
     // факт накопительный (только до последнего месяца с фактом)
@@ -600,7 +913,7 @@ function renderDashboardV3(sheetData, planfixData) {
         const tr = document.createElement('tr');
         tr.innerHTML =
             `<td>${cat.name}</td>` +
-            `<td style="text-align:right">${formatNumber(factYear)}</td>` +
+            cellHtml(formatNumber(factYear), factYear, 'year', cat.planfixName) +
             `<td style="text-align:right">${formatNumber(planYear)}</td>` +
             `<td style="text-align:right; color:${diff < 0 ? '#c0392b' : '#1e7e34'}">${formatDiff(diff)}</td>` +
             `<td style="text-align:right">${pct > 0 ? pct + '%' : '-'}</td>`;
@@ -615,7 +928,7 @@ function renderDashboardV3(sheetData, planfixData) {
         tr.style.background = '#dce6f1';
         tr.innerHTML =
             `<td><strong>Итого за год</strong></td>` +
-            `<td style="text-align:right"><strong>${formatNumber(grandFact)}</strong></td>` +
+            cellHtml(`<strong>${formatNumber(grandFact)}</strong>`, grandFact, 'year', 'ALL') +
             `<td style="text-align:right"><strong>${formatNumber(grandPlan)}</strong></td>` +
             `<td style="text-align:right; color:${diff < 0 ? '#c0392b' : '#1e7e34'}"><strong>${formatDiff(diff)}</strong></td>` +
             `<td style="text-align:right"><strong>${pct > 0 ? pct + '%' : '-'}</strong></td>`;
