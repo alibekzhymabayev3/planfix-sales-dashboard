@@ -169,11 +169,15 @@ function renderFunnel(entries) {
                 bucketTaskIds.add(r.task_id); monthTaskIds.add(r.task_id);
                 const probText = (r.probability === null || r.probability === undefined)
                     ? '—' : (Math.round(r.probability) + '%');
+                const advText = (r.advance_pct === null || r.advance_pct === undefined)
+                    ? (r.advance_sum ? formatNumber(r.advance_sum) + ' тг' : '—')
+                    : (Math.round(r.advance_pct) + '% · ' + formatNumber(r.advance_sum) + ' тг');
                 return `<tr>
                     <td><a href="${taskUrl(r.task_id)}" target="_blank" rel="noopener">${escapeHtml(r.task_name)}</a></td>
                     <td>${escapeHtml(r.customer || '')}</td>
                     <td>${escapeHtml(r.material || '')}${r.material ? ' · ' : ''}${formatNumber(r.m2)} м²</td>
                     <td style="text-align:right">${formatNumber(r.sum)} тг</td>
+                    <td style="text-align:right">${advText}</td>
                     <td class="funnel-bucket-${bucketKey}"><span class="funnel-dot"></span>${probText}</td>
                 </tr>`;
             }).join('');
@@ -197,7 +201,7 @@ function renderFunnel(entries) {
                         <table class="drill-table funnel-table">
                             <thead><tr>
                                 <th>Задача</th><th>Контрагент</th><th>Материал / Объём</th>
-                                <th>Сумма договора</th><th>Вероятность</th>
+                                <th>Сумма договора</th><th>Аванс</th><th>Вероятность</th>
                             </tr></thead>
                             <tbody>${rowsHtml}</tbody>
                         </table>

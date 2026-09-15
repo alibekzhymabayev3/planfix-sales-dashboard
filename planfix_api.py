@@ -11,6 +11,8 @@ FIELD_SUM = 148120        # "Итого стоимость по договору
 FIELD_DATE = 148122       # "Дата оплаты аванса"
 FIELD_SIGNED = 144422     # "Договор подписан" (Поле задачи, тип Список)
 FIELD_PROBABILITY = 148320  # "Вероятность заключения (%)" (Datatag 38590, тип Number)
+FIELD_ADVANCE_PCT = 148116  # "Размер аванса, %" (Datatag 38590, тип Number)
+FIELD_ADVANCE_SUM = 148118  # "Размер аванса, тг" (Datatag 38590, тип Calc)
 
 # Процессы, входящие в отчёт «Воронка вероятности» 764900
 FUNNEL_PROCESS_IDS = {268814, 268846, 268960, 268958}
@@ -331,7 +333,7 @@ async def fetch_probability_funnel():
         # 1. Fetch all analytic entries for 38590 (поля перечислены явно — иначе
         #    customFieldData у этого dataTag приходит пустым).
         print("DEBUG: [funnel] Fetching all analytic entries from datatag 38590...")
-        fields_an = "id,task,148320,148108,148110,148120,148122"
+        fields_an = "id,task,148320,148108,148110,148120,148122,148116,148118"
         all_entries = await fetch_all_analytic_entries(client, account, headers, fields_an, log_prefix="[funnel] ")
 
         print(f"DEBUG: [funnel] Found {len(all_entries)} analytic entries total.")
@@ -354,6 +356,8 @@ async def fetch_probability_funnel():
             year = None
             date_str = ""
             probability = None
+            advance_pct = None
+            advance_sum = 0.0
 
             for field in cfd:
                 f_id = field['field']['id']
@@ -390,6 +394,22 @@ async def fetch_probability_funnel():
                         probability = float(val) if val not in (None, "") else None
                     except (TypeError, ValueError):
                         probability = None
+                elif f_id == FIELD_ADVANCE_PCT:
+                    val = field.get("value")
+                    if val is None:
+                        val = field.get("stringValue")
+                    try:
+                        advance_pct = float(val) if val not in (None, "") else None
+                    except (TypeError, ValueError):
+                        advance_pct = None
+                elif f_id == FIELD_ADVANCE_SUM:
+                    val = field.get("value")
+                    if val is None:
+                        val = field.get("stringValue")
+                    try:
+                        advance_sum = float(val) if val not in (None, "") else 0.0
+                    except (TypeError, ValueError):
+                        advance_sum = 0.0
 
             if m2 > 0 and year == 2026:
                 parsed_entries.append({
@@ -401,6 +421,8 @@ async def fetch_probability_funnel():
                     "date": date_str,
                     "month": month,
                     "probability": probability,
+                    "advance_pct": advance_pct,
+                    "advance_sum": advance_sum,
                 })
                 task_ids_to_check.add(t_id)
 
@@ -430,6 +452,8 @@ async def fetch_probability_funnel():
                 "material": e["material"],
                 "m2": e["m2"],
                 "sum": e["sum"],
+                "advance_pct": e["advance_pct"],
+                "advance_sum": e["advance_sum"],
                 "date": e["date"],
                 "month": e["month"],
                 "month_label": f"{MONTHS_RU[e['month']]} 2026",
