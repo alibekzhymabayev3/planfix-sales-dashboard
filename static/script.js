@@ -1,9 +1,9 @@
-// Opened as http://user:pass@host/... (embedded browsers without a Basic Auth prompt):
-// Chrome forbids fetch() from such a page, so drop the credentials from the URL —
-// the browser has already cached them for this origin.
-if (location.username || location.password) {
-    location.replace(location.href.replace(/\/\/[^\/@]*@/, '//'));
-}
+// API URLs are built from location.origin, not relative: embedded browsers without a Basic Auth
+// prompt are opened as http://user:pass@host/dashboard/, and Chrome rejects fetch() of a URL
+// resolved against such a page («Ошибка загрузки»). origin never carries the credentials; the
+// browser has cached them and still sends Authorization. Subpath (/dashboard/) is preserved.
+const API_BASE = location.origin + location.pathname.replace(/[^/]*$/, '');
+function apiUrl(path) { return API_BASE + path; }
 
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.disabled = true;
         btn.innerText = 'Обновление… (~20 сек)';
         const before = window.lastSyncValue || null;
-        fetch('api/sync', { method: 'POST' })
+        fetch(apiUrl('api/sync'), { method: 'POST' })
             .then(res => res.json())
             .then(() => pollUpdate(before, 0))
             .catch(err => { console.error(err); pollUpdate(before, 0); });
@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.disabled = true;
         btn.innerText = 'Обновление…';
         const before = window.funnelLastSync || null;
-        fetch('api/funnel/sync', { method: 'POST' })
+        fetch(apiUrl('api/funnel/sync'), { method: 'POST' })
             .then(res => res.json())
             .then(() => pollFunnelUpdate(before, 0))
             .catch(err => { console.error(err); pollFunnelUpdate(before, 0); });
@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function loadData() {
-    fetch('api/data')
+    fetch(apiUrl('api/data'))
         .then(res => res.json())
         .then(data => {
             window.PF_DETAILS = data.planfix_details || {};
@@ -64,7 +64,7 @@ function loadData() {
 
 function pollUpdate(before, tries) {
     const btn = document.getElementById('btn-sync');
-    fetch('api/data')
+    fetch(apiUrl('api/data'))
         .then(r => r.json())
         .then(data => {
             const updated = data.last_sync && data.last_sync !== before;
@@ -89,7 +89,7 @@ function pollUpdate(before, tries) {
 // ВКЛАДКА V4 — ВОРОНКА ВЕРОЯТНОСТИ
 // ============================================================
 function loadFunnel() {
-    fetch('api/funnel')
+    fetch(apiUrl('api/funnel'))
         .then(res => res.json())
         .then(data => {
             window.funnelLastSync = data.last_sync || null;
@@ -117,7 +117,7 @@ function loadFunnel() {
 
 function pollFunnelUpdate(before, tries) {
     const btn = document.getElementById('btn-funnel-sync');
-    fetch('api/funnel')
+    fetch(apiUrl('api/funnel'))
         .then(r => r.json())
         .then(data => {
             const updated = data.last_sync && data.last_sync !== before;
