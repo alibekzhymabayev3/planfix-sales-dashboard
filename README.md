@@ -3,7 +3,8 @@
 Веб-дашборд продаж компании Техновид — план/факт по материалам (Алюм, ПВХ, СП, НВФ) с данными из Planfix.
 
 **Репозиторий:** `github.com/alibekzhymabayev3/planfix-sales-dashboard`
-**Продакшн URL:** `http://188.0.147.247/dashboard/`
+**Продакшн URL:** `http://146.59.118.193:8880/dashboard/` — логин `sales` (Basic Auth, пароль у владельца, в git не хранится)
+**Доступ:** только из офиса/внутренней сети (IP allow-list nginx) **и** логин/пароль — см. [Доступ и авторизация](#доступ-и-авторизация)
 
 ---
 
@@ -31,7 +32,7 @@
 
 Дашборд опубликован за nginx по пути **`/dashboard/`**. Поэтому в `static/script.js`
 запросы к API должны быть **относительными** (`api/data`, `api/sync`), а НЕ от корня
-(`/api/data`). Абсолютные пути дают `188.0.147.247/api/...` → **404**, таблицы не
+(`/api/data`). Абсолютные пути дают `146.59.118.193:8880/api/...` → **404**, таблицы не
 заполняются, «Обновить» → «Ошибка сети». При запуске из корня (`:8000/`) обе формы
 работают, но под `/dashboard/` — только относительные.
 
@@ -51,10 +52,12 @@
 
 ```
 Браузер
-    ↓ GET/POST /dashboard/...
-nginx (188.0.147.247:80)
-    ↓ proxy_pass /dashboard/ → localhost:8000/
-Flask app.py (localhost:8000)
+    ↓ GET/POST http://146.59.118.193:8880/dashboard/...
+OVH port-forward :8880 → vm-bots nginx :80
+    ↓ allow-list по IP + Basic Auth (sales)
+    ↓ proxy_pass /dashboard/ → 127.0.0.1:8050/
+Docker-контейнер planfix-dashboard (host 8050 → cont 8000)
+Flask app.py (:8000)
     ├─ GET  /          → static/index.html
     ├─ GET  /api/data  → JSON: {excel_sheet, planfix_fact, last_sync}
     └─ POST /api/sync  → пересинхронизация из Planfix
@@ -182,7 +185,43 @@ public_url = ngrok.connect(8000)
 
 ## Инфраструктура
 
-### Systemd сервис
+### Продакшн: vm-bots, Docker (актуально)
+
+- **Сервер:** vm-bots (внутр. IP `10.172.10.5`), наружу через OVH: публичный `146.59.118.193:8880` → nginx `:80` этой ВМ. Порт 80 наружу не проброшен.
+- **Контейнер:** `planfix-dashboard`, сервис в `~/migrated/docker-compose.yml`, порты `8050:8000`, монтируются `config.json` и `excel_structure.json`.
+- **Каталог:** `~/migrated/planfix-sales-dashboard/`
+
+```bash
+cd ~/migrated
+docker compose up -d --build planfix-dashboard   # деплой после git pull
+docker logs -f planfix-dashboard
+```
+
+### Доступ и авторизация
+
+Конфиг nginx: `/etc/nginx/sites-available/migrated`
+
+```nginx
+location /dashboard/ {
+    auth_basic "Sales Dashboard";
+    auth_basic_user_file /etc/nginx/.htpasswd_dashboard;
+    allow 127.0.0.1; allow 10.172.10.0/24; allow 188.0.147.247; deny all;
+    proxy_pass http://127.0.0.1:8050/;
+    ...
+}
+```
+
+- Работают **оба** ограничения (по умолчанию `satisfy all`): IP не из списка → `403`, нет/неверный пароль → `401`.
+- Basic Auth добавлен 2026-09-15. Пользователь один — `sales`; хэш (apr1) в `/etc/nginx/.htpasswd_dashboard`. Пароль в репозиторий не кладётся (репо публичное на GitHub) — хранится у владельца.
+- Смена пароля: `sudo htpasswd /etc/nginx/.htpasswd_dashboard sales && sudo nginx -t && sudo systemctl reload nginx` (или `openssl passwd -apr1`, если нет `apache2-utils`).
+- ⚠️ Порт 8880 — HTTP без TLS, пароль передаётся по сети в base64.
+- ⚠️ Контейнер слушает `0.0.0.0:8050` — изнутри сети `http://10.172.10.5:8050/` открывается **в обход** nginx (без пароля). Снаружи `146.59.118.193:8050` не проброшен (проверено 2026-09-30: таймаут).
+
+### Legacy: systemd на старом сервере (188.0.147.247, не используется)
+
+Ниже — исходная схема развёртывания до переезда на vm-bots. Оставлена для истории.
+
+#### Systemd сервис
 **Файл:** `/etc/systemd/system/planfix-dashboard.service`
 
 ```ini
@@ -209,7 +248,7 @@ sudo systemctl restart planfix-dashboard
 journalctl -u planfix-dashboard -f
 ```
 
-### Nginx
+#### Nginx
 **Файл:** `/etc/nginx/sites-available/inventory`
 ```nginx
 location /dashboard/ {
@@ -267,7 +306,7 @@ sudo nginx -t && sudo systemctl reload nginx
 - **Только подписанные договоры** — фильтрация по полю "Договор подписан" = "Да"
 - **Кэш в памяти** — сбрасывается при рестарте сервиса
 - **Синхронизация ~20 сек** — из-за индивидуальных запросов к задачам для проверки "Договор подписан"
-- **Нет авторизации** — дашборд открыт всем, у кого есть URL
+- **Авторизация — только nginx Basic Auth** (один общий логин `sales`), без ролей и HTTPS
 
 ---
 
@@ -290,7 +329,7 @@ sudo systemctl restart planfix-dashboard
 ## TODO
 
 - [ ] Параметризовать год (сейчас хардкод 2026)
-- [ ] Добавить авторизацию
+- [x] Добавить авторизацию (nginx Basic Auth, 2026-09-15)
 - [ ] Автоматическое обновление данных по расписанию (cron)
 - [ ] Экспорт в Excel
 - [ ] HTTPS
