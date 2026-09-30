@@ -1,3 +1,10 @@
+// Opened as http://user:pass@host/... (embedded browsers without a Basic Auth prompt):
+// Chrome forbids fetch() from such a page, so drop the credentials from the URL —
+// the browser has already cached them for this origin.
+if (location.username || location.password) {
+    location.replace(location.href.replace(/\/\/[^\/@]*@/, '//'));
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
     loadFunnel();
