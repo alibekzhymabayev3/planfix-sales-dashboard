@@ -865,7 +865,7 @@ function renderDashboardV3(sheetData, planfixData) {
         return tr;
     }
 
-    tbody.appendChild(makeMoneyRow('Факт Техновид, в тенге', m => factMoneyByMonth[m], '#fce4d6', 'ALL'));
+    tbody.appendChild(makeMoneyRow('Факт Техновид, в тенге, договора', m => factMoneyByMonth[m], '#fce4d6', 'ALL'));
     tbody.appendChild(makeMoneyRow('План, в тенге', m => optMoneyByMonth[m], '#e6f4ea'));
 
     // факт накопительный (только до последнего месяца с фактом)
