@@ -90,10 +90,25 @@ def _refresh_fact_then_funnel():
     start_funnel_refresh()
 
 
+# Автообновление — только в рабочее время (сервер живёт в Asia/Almaty): ночью и в
+# воскресенье данные всё равно никто не смотрит, а каждый цикл стоит ~170 запросов
+# к Planfix. Кнопка «Обновить» работает всегда.
+REFRESH_HOUR_FROM = int(os.environ.get("REFRESH_HOUR_FROM", "7"))
+REFRESH_HOUR_TO = int(os.environ.get("REFRESH_HOUR_TO", "20"))
+REFRESH_WEEKDAYS = {0, 1, 2, 3, 4, 5}      # пн–сб
+
+
+def _in_working_hours(now=None):
+    now = now or datetime.datetime.now()
+    return (now.weekday() in REFRESH_WEEKDAYS
+            and REFRESH_HOUR_FROM <= now.hour < REFRESH_HOUR_TO)
+
+
 def _periodic_refresh():
     while True:
-        time.sleep(1800)  # автообновление раз в 30 минут (кнопка «Обновить» — для срочного)
-        _refresh_fact_then_funnel()
+        time.sleep(1800)  # шаг автообновления — 30 минут
+        if _in_working_hours():
+            _refresh_fact_then_funnel()
 
 
 @app.after_request
