@@ -1,6 +1,7 @@
 import httpx
 import json
 import os
+import time
 import asyncio
 from datetime import datetime
 
@@ -42,97 +43,81 @@ def probability_bucket(probability):
             return (key, label, order)
     return NO_PROBABILITY_BUCKET
 
-async def get_tasks_signed_status(client, tasks_ids, headers, account):
+# Поля задачи, которых нет в аналитике 38590. Один набор на оба отчёта (факт + воронка),
+# чтобы не ходить за одной и той же задачей дважды за цикл обновления.
+TASK_INFO_FIELDS = "id,name,project,counterparty,processId,144422"
+
+# Факт и воронка обновляются подряд (см. app.py:_refresh_fact_then_funnel), поэтому
+# результаты тяжёлых чтений переиспользуются в пределах одного цикла.
+CYCLE_TTL = 300.0
+_entries_cache = {"ts": 0.0, "entries": None}
+_task_info_cache = {"ts": 0.0, "info": {}}
+
+
+def _cache_fresh(cache):
+    return cache["ts"] and (time.monotonic() - cache["ts"]) < CYCLE_TTL
+
+
+async def get_tasks_info(client, tasks_ids, headers, account):
     """
-    Individual fetch of task 'Signed' status + 'Заказчик' (counterparty) to ensure reliability.
-    Возвращает {t_id_str: {"signed": bool, "customer": str}}.
-    Uses a semaphore to avoid API rate limits.
-    """
-    if not tasks_ids:
-        return {}
+    Данные уровня задачи, которых нет в аналитике: статус «Договор подписан» (144422),
+    контрагент, проект, процесс. Возвращает
+    {t_id_str: {"signed","customer","project","processId"}}.
 
-    status_map = {}
-    semaphore = asyncio.Semaphore(25) # Max 3 concurrent requests
-
-    async def check_task(t_id):
-        t_id_str = str(t_id)
-        # counterparty = «Заказчик» задачи (для drill-down)
-        url = f'https://{account}.planfix.com/rest/task/{t_id_str}?fields=id,customFieldData,144422,counterparty'
-        async with semaphore:
-            try:
-                # We'll put a small delay to be safe
-                await asyncio.sleep(0.01)
-                res = await client.get(url, headers=headers)
-                if res.status_code == 200:
-                    task_data = res.json().get('task', {})
-                    is_signed = False
-                    for cf in task_data.get('customFieldData', []):
-                        if cf['field']['id'] == FIELD_SIGNED:
-                            val = str(cf.get('stringValue') or cf.get('value') or "").strip()
-                            if val == "Да":
-                                is_signed = True
-                            break
-                    customer = (task_data.get('counterparty') or {}).get('name', "") or ""
-                    return t_id_str, {"signed": is_signed, "customer": customer}
-                else:
-                    print(f"DEBUG: Task {t_id_str} returned {res.status_code}")
-                    return t_id_str, {"signed": False, "customer": ""}
-            except Exception as e:
-                print(f"DEBUG: Error checking task {t_id_str}: {e}")
-                return t_id_str, {"signed": False, "customer": ""}
-
-    tasks_to_check = list(set(tasks_ids))
-    print(f"DEBUG: Checking 'Signed'+customer for {len(tasks_to_check)} tasks individually...")
-
-    results = await asyncio.gather(*(check_task(tid) for tid in tasks_to_check))
-    for t_id, info in results:
-        status_map[t_id] = info
-
-    return status_map
-
-async def get_tasks_funnel_info(client, tasks_ids, headers, account):
-    """
-    Добор данных уровня задачи для воронки вероятности (project/counterparty/processId),
-    которых нет в аналитике 38590. Возвращает {t_id_str: {"customer","processId","project"}}.
+    Один запрос на задачу на ОБА отчёта: раньше факт и воронка тянули одну и ту же
+    задачу по отдельности (две выборки полей) — это удваивало расход лимита API.
     """
     if not tasks_ids:
         return {}
+
+    wanted = {str(t) for t in tasks_ids}
+    if _cache_fresh(_task_info_cache):
+        cached = _task_info_cache["info"]
+        if wanted <= set(cached):
+            print(f"DEBUG: task info for {len(wanted)} tasks taken from cycle cache")
+            return {t: cached[t] for t in wanted}
 
     info_map = {}
     semaphore = asyncio.Semaphore(25)
 
-    async def check_task(t_id):
-        t_id_str = str(t_id)
-        url = f'https://{account}.planfix.com/rest/task/{t_id_str}?fields=id,name,project,counterparty,processId'
+    async def check_task(t_id_str):
+        url = f'https://{account}.planfix.com/rest/task/{t_id_str}?fields={TASK_INFO_FIELDS}'
+        empty = {"signed": False, "customer": "", "project": "", "processId": None}
         async with semaphore:
             try:
                 res = await client.get(url, headers=headers)
-                if res.status_code == 200:
-                    task_data = res.json().get('task', {})
-                    customer = (task_data.get('counterparty') or {}).get('name', "") or ""
-                    project = (task_data.get('project') or {}).get('name', "") or ""
-                    raw_pid = task_data.get('processId')
-                    try:
-                        process_id = int(raw_pid) if raw_pid is not None else None
-                    except (TypeError, ValueError):
-                        process_id = None
-                    return t_id_str, {
-                        "customer": customer,
-                        "project": project,
-                        "processId": process_id,
-                    }
-                else:
-                    print(f"DEBUG: Funnel task {t_id_str} returned {res.status_code}")
-                    return t_id_str, {"customer": "", "project": "", "processId": None}
+                if res.status_code != 200:
+                    print(f"DEBUG: Task {t_id_str} returned {res.status_code}")
+                    return t_id_str, empty
+                task_data = res.json().get('task', {})
+                signed = False
+                for cf in task_data.get('customFieldData', []):
+                    if cf['field']['id'] == FIELD_SIGNED:
+                        val = str(cf.get('stringValue') or cf.get('value') or "").strip()
+                        signed = (val == "Да")
+                        break
+                raw_pid = task_data.get('processId')
+                try:
+                    process_id = int(raw_pid) if raw_pid is not None else None
+                except (TypeError, ValueError):
+                    process_id = None
+                return t_id_str, {
+                    "signed": signed,
+                    "customer": (task_data.get('counterparty') or {}).get('name', "") or "",
+                    "project": (task_data.get('project') or {}).get('name', "") or "",
+                    "processId": process_id,
+                }
             except Exception as e:
-                print(f"DEBUG: Error checking funnel task {t_id_str}: {e}")
-                return t_id_str, {"customer": "", "project": "", "processId": None}
+                print(f"DEBUG: Error checking task {t_id_str}: {e}")
+                return t_id_str, empty
 
-    tasks_to_check = list(set(tasks_ids))
-    results = await asyncio.gather(*(check_task(tid) for tid in tasks_to_check))
+    print(f"DEBUG: Fetching task info for {len(wanted)} tasks...")
+    results = await asyncio.gather(*(check_task(t) for t in wanted))
     for t_id, info in results:
         info_map[t_id] = info
 
+    _task_info_cache["info"] = dict(info_map)
+    _task_info_cache["ts"] = time.monotonic()
     return info_map
 
 
@@ -154,7 +139,7 @@ async def fetch_all_analytic_entries(client, account, headers, fields, datatag_i
 
     all_entries = []
     page = 0
-    WAVE = 10
+    WAVE = 5          # меньше волна — меньше холостых страниц после конца данных
     while True:
         offsets = [(page + i) * 100 for i in range(WAVE)]
         pages = await asyncio.gather(*(fetch_page(o) for o in offsets))
@@ -164,6 +149,25 @@ async def fetch_all_analytic_entries(client, account, headers, fields, datatag_i
             break          # достигли конца (есть неполная/пустая страница)
         page += WAVE
     return all_entries
+
+
+# Объединённый набор полей аналитики: факт и воронка берут из 38590 разные колонки,
+# но сам справочник один — читаем его за один проход на цикл, а не дважды.
+ANALYTIC_FIELDS = ("id,task,customFieldData,"
+                   "148108,148110,148120,148122,148320,148116,148118")
+
+
+async def get_analytic_entries(client, account, headers, log_prefix=""):
+    """Строки аналитики 38590 с кэшем на цикл обновления (см. CYCLE_TTL)."""
+    if _cache_fresh(_entries_cache) and _entries_cache["entries"] is not None:
+        print(f"DEBUG: {log_prefix}analytic entries taken from cycle cache "
+              f"({len(_entries_cache['entries'])})")
+        return _entries_cache["entries"]
+    entries = await fetch_all_analytic_entries(client, account, headers,
+                                               ANALYTIC_FIELDS, log_prefix=log_prefix)
+    _entries_cache["entries"] = entries
+    _entries_cache["ts"] = time.monotonic()
+    return entries
 
 
 def load_config():
@@ -187,8 +191,7 @@ async def fetch_planfix_fact():
     async with httpx.AsyncClient(timeout=60.0) as client:
         # 1. Fetch ALL analytic entries for 38590
         print("DEBUG: Fetching all analytic entries from datatag 38590...")
-        fields_an = "id,task,customFieldData,148108,148110,148120,148122"
-        all_entries = await fetch_all_analytic_entries(client, account, headers, fields_an)
+        all_entries = await get_analytic_entries(client, account, headers)
 
         print(f"DEBUG: Found {len(all_entries)} analytic entries total.")
 
@@ -220,7 +223,7 @@ async def fetch_planfix_fact():
         print(f"DEBUG: CASCADE: {len(relevant_entries)} entries in 2026 referring to {len(task_ids_to_check)} unique tasks.")
 
         # 3. Targeted check of "Signed" status ONLY for tasks in 2026
-        signed_status_map = await get_tasks_signed_status(client, list(task_ids_to_check), headers, account)
+        signed_status_map = await get_tasks_info(client, list(task_ids_to_check), headers, account)
         
         # 4. Final filter and aggregation
         aggregated = {}
@@ -333,8 +336,7 @@ async def fetch_probability_funnel():
         # 1. Fetch all analytic entries for 38590 (поля перечислены явно — иначе
         #    customFieldData у этого dataTag приходит пустым).
         print("DEBUG: [funnel] Fetching all analytic entries from datatag 38590...")
-        fields_an = "id,task,148320,148108,148110,148120,148122,148116,148118"
-        all_entries = await fetch_all_analytic_entries(client, account, headers, fields_an, log_prefix="[funnel] ")
+        all_entries = await get_analytic_entries(client, account, headers, log_prefix="[funnel] ")
 
         print(f"DEBUG: [funnel] Found {len(all_entries)} analytic entries total.")
 
@@ -430,7 +432,7 @@ async def fetch_probability_funnel():
               f"{len(task_ids_to_check)} unique tasks to check.")
 
         # 3. Add task-level fields (project/counterparty/processId) not in the analytic.
-        task_info_map = await get_tasks_funnel_info(client, list(task_ids_to_check), headers, account)
+        task_info_map = await get_tasks_info(client, list(task_ids_to_check), headers, account)
 
         # 4. Final filter by process (as report 764900) + assemble output rows.
         result = []

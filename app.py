@@ -92,7 +92,7 @@ def _refresh_fact_then_funnel():
 
 def _periodic_refresh():
     while True:
-        time.sleep(600)   # автообновление раз в 10 минут
+        time.sleep(1800)  # автообновление раз в 30 минут (кнопка «Обновить» — для срочного)
         _refresh_fact_then_funnel()
 
 
