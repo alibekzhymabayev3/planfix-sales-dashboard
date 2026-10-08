@@ -179,6 +179,9 @@ function renderFunnel(entries) {
                 const advText = (r.advance_pct === null || r.advance_pct === undefined)
                     ? (r.advance_sum ? formatNumber(r.advance_sum) + ' тг' : '—')
                     : (Math.round(r.advance_pct) + '% · ' + formatNumber(r.advance_sum) + ' тг');
+                const hasMargin = r.margin_pct !== null && r.margin_pct !== undefined;
+                const marginPctText = hasMargin ? (formatPct(r.margin_pct) + '%') : '—';
+                const marginSumText = hasMargin ? (formatNumber(r.margin_sum) + ' тг') : '—';
                 return `<tr>
                     <td><a href="${taskUrl(r.task_id)}" target="_blank" rel="noopener">${escapeHtml(r.task_name)}</a></td>
                     <td>${escapeHtml(r.customer || '')}</td>
@@ -186,6 +189,8 @@ function renderFunnel(entries) {
                     <td style="text-align:right">${formatNumber(r.sum)} тг</td>
                     <td style="text-align:right">${advText}</td>
                     <td class="funnel-bucket-${bucketKey}"><span class="funnel-dot"></span>${probText}</td>
+                    <td style="text-align:right">${marginPctText}</td>
+                    <td style="text-align:right">${marginSumText}</td>
                 </tr>`;
             }).join('');
 
@@ -209,6 +214,7 @@ function renderFunnel(entries) {
                             <thead><tr>
                                 <th>Задача</th><th>Контрагент</th><th>Материал / Объём</th>
                                 <th>Сумма договора</th><th>Аванс</th><th>Вероятность</th>
+                                <th>Плановая маржа, %</th><th>Плановая маржа, тг</th>
                             </tr></thead>
                             <tbody>${rowsHtml}</tbody>
                         </table>
@@ -252,6 +258,10 @@ function parseValue(val) {
 function formatNumber(num) {
     if (num === 0) return "-";
     return new Intl.NumberFormat('ru-RU').format(Math.round(num));
+}
+
+function formatPct(num) {
+    return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(num);
 }
 
 function formatDiff(val) {

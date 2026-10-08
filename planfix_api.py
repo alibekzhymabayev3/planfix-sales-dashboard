@@ -14,6 +14,7 @@ FIELD_SIGNED = 144422     # "Договор подписан" (Поле зада
 FIELD_PROBABILITY = 148320  # "Вероятность заключения (%)" (Datatag 38590, тип Number)
 FIELD_ADVANCE_PCT = 148116  # "Размер аванса, %" (Datatag 38590, тип Number)
 FIELD_ADVANCE_SUM = 148118  # "Размер аванса, тг" (Datatag 38590, тип Calc)
+FIELD_MARGIN_PCT = 148436   # "Планируемая маржа" (Datatag 38590, тип Number, in percent)
 
 # Процессы, входящие в отчёт «Воронка вероятности» 764900
 FUNNEL_PROCESS_IDS = {268814, 268846, 268960, 268958}
@@ -154,7 +155,7 @@ async def fetch_all_analytic_entries(client, account, headers, fields, datatag_i
 # Объединённый набор полей аналитики: факт и воронка берут из 38590 разные колонки,
 # но сам справочник один — читаем его за один проход на цикл, а не дважды.
 ANALYTIC_FIELDS = ("id,task,customFieldData,"
-                   "148108,148110,148120,148122,148320,148116,148118")
+                   "148108,148110,148120,148122,148320,148116,148118,148436")
 
 
 async def get_analytic_entries(client, account, headers, log_prefix=""):
@@ -360,6 +361,7 @@ async def fetch_probability_funnel():
             probability = None
             advance_pct = None
             advance_sum = 0.0
+            margin_pct = None
 
             for field in cfd:
                 f_id = field['field']['id']
@@ -412,6 +414,14 @@ async def fetch_probability_funnel():
                         advance_sum = float(val) if val not in (None, "") else 0.0
                     except (TypeError, ValueError):
                         advance_sum = 0.0
+                elif f_id == FIELD_MARGIN_PCT:
+                    val = field.get("value")
+                    if val is None:
+                        val = field.get("stringValue")
+                    try:
+                        margin_pct = float(val) if val not in (None, "") else None
+                    except (TypeError, ValueError):
+                        margin_pct = None
 
             if m2 > 0 and year == 2026:
                 parsed_entries.append({
@@ -425,6 +435,7 @@ async def fetch_probability_funnel():
                     "probability": probability,
                     "advance_pct": advance_pct,
                     "advance_sum": advance_sum,
+                    "margin_pct": margin_pct,
                 })
                 task_ids_to_check.add(t_id)
 
@@ -456,6 +467,9 @@ async def fetch_probability_funnel():
                 "sum": e["sum"],
                 "advance_pct": e["advance_pct"],
                 "advance_sum": e["advance_sum"],
+                # Planned margin amount derived from the percent and the contract sum
+                "margin_pct": e["margin_pct"],
+                "margin_sum": (e["margin_pct"] / 100 * e["sum"]) if e["margin_pct"] is not None else None,
                 "date": e["date"],
                 "month": e["month"],
                 "month_label": f"{MONTHS_RU[e['month']]} 2026",
