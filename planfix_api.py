@@ -315,7 +315,7 @@ async def fetch_planfix_fact():
 async def fetch_probability_funnel():
     """
     Данные для вкладки «Воронка вероятности» (реконструкция отчёта 764900):
-    строки аналитики 38590, отфильтрованные по объёму>0, году оплаты аванса>=FUNNEL_FROM_YEAR
+    строки аналитики 38590, отфильтрованные по (объёму>0 или заполненной вероятности), году оплаты аванса>=FUNNEL_FROM_YEAR
     и принадлежности задачи к процессам FUNNEL_PROCESS_IDS.
 
     REST-генерация самого отчёта 764900 заблокирована тарифом (report/generate ->
@@ -343,7 +343,7 @@ async def fetch_probability_funnel():
 
         print(f"DEBUG: [funnel] Found {len(all_entries)} analytic entries total.")
 
-        # 2. Parse each entry, keep only m2>0 and year(148122)>=FUNNEL_FROM_YEAR.
+        # 2. Parse each entry, keep only (m2>0 or probability set) and year(148122)>=FUNNEL_FROM_YEAR.
         parsed_entries = []
         task_ids_to_check = set()
 
@@ -425,7 +425,8 @@ async def fetch_probability_funnel():
                     except (TypeError, ValueError):
                         margin_pct = None
 
-            if m2 > 0 and year is not None and year >= FUNNEL_FROM_YEAR:
+            # Early-stage rows (calls) often have probability but no volume yet — keep them too
+            if (m2 > 0 or probability is not None) and year is not None and year >= FUNNEL_FROM_YEAR:
                 parsed_entries.append({
                     "task_id": str(t_id),
                     "task_name": t_name,
@@ -442,7 +443,7 @@ async def fetch_probability_funnel():
                 })
                 task_ids_to_check.add(t_id)
 
-        print(f"DEBUG: [funnel] {len(parsed_entries)} entries with m2>0 from {FUNNEL_FROM_YEAR}, "
+        print(f"DEBUG: [funnel] {len(parsed_entries)} entries with m2>0 or probability from {FUNNEL_FROM_YEAR}, "
               f"{len(task_ids_to_check)} unique tasks to check.")
 
         # 3. Add task-level fields (project/counterparty/processId) not in the analytic.

@@ -187,7 +187,7 @@ function renderFunnel(entries) {
                 return `<tr>
                     <td><a href="${taskUrl(r.task_id)}" target="_blank" rel="noopener">${escapeHtml(r.task_name)}</a></td>
                     <td>${escapeHtml(r.customer || '')}</td>
-                    <td>${escapeHtml(r.material || '')}${r.material ? ' · ' : ''}${formatNumber(r.m2)} м²</td>
+                    <td>${escapeHtml(r.material || '')}${r.material && r.m2 ? ' · ' : ''}${r.m2 ? formatNumber(r.m2) + ' м²' : (r.material ? '' : '—')}</td>
                     <td style="text-align:right">${formatNumber(r.sum)} тг</td>
                     <td style="text-align:right">${advText}</td>
                     <td class="funnel-bucket-${bucketKey}"><span class="funnel-dot"></span>${probText}</td>
