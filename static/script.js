@@ -138,7 +138,7 @@ function pollFunnelUpdate(before, tries) {
 }
 
 // entries: плоский список {task_id, task_name, customer, material, m2, sum, date,
-//   month, month_label, probability, bucket, bucket_label, bucket_order}
+//   month, year, period, month_label, probability, bucket, bucket_label, bucket_order}
 function renderFunnel(entries) {
     const container = document.getElementById('funnel-tree');
     if (!entries || !entries.length) {
@@ -149,8 +149,10 @@ function renderFunnel(entries) {
     // Группировка: месяц -> бакет вероятности -> строки
     const months = new Map();
     entries.forEach(e => {
-        if (!months.has(e.month)) months.set(e.month, { label: e.month_label, buckets: new Map() });
-        const monthObj = months.get(e.month);
+        // period = year*100+month, so months of different years don't merge
+        const key = e.period ?? e.month;
+        if (!months.has(key)) months.set(key, { label: e.month_label, buckets: new Map() });
+        const monthObj = months.get(key);
         if (!monthObj.buckets.has(e.bucket)) {
             monthObj.buckets.set(e.bucket, { label: e.bucket_label, order: e.bucket_order, rows: [] });
         }

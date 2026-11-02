@@ -18,6 +18,8 @@ FIELD_MARGIN_PCT = 148436   # "Планируемая маржа" (Datatag 38590
 
 # Процессы, входящие в отчёт «Воронка вероятности» 764900
 FUNNEL_PROCESS_IDS = {268814, 268846, 268960, 268958}
+# Funnel shows advance-payment months from this year onward (2027+ included)
+FUNNEL_FROM_YEAR = 2026
 
 MONTHS_RU = [
     "", "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
@@ -313,7 +315,7 @@ async def fetch_planfix_fact():
 async def fetch_probability_funnel():
     """
     Данные для вкладки «Воронка вероятности» (реконструкция отчёта 764900):
-    строки аналитики 38590, отфильтрованные по объёму>0, году оплаты аванса==2026
+    строки аналитики 38590, отфильтрованные по объёму>0, году оплаты аванса>=FUNNEL_FROM_YEAR
     и принадлежности задачи к процессам FUNNEL_PROCESS_IDS.
 
     REST-генерация самого отчёта 764900 заблокирована тарифом (report/generate ->
@@ -341,7 +343,7 @@ async def fetch_probability_funnel():
 
         print(f"DEBUG: [funnel] Found {len(all_entries)} analytic entries total.")
 
-        # 2. Parse each entry, keep only m2>0 and year(148122)==2026.
+        # 2. Parse each entry, keep only m2>0 and year(148122)>=FUNNEL_FROM_YEAR.
         parsed_entries = []
         task_ids_to_check = set()
 
@@ -423,7 +425,7 @@ async def fetch_probability_funnel():
                     except (TypeError, ValueError):
                         margin_pct = None
 
-            if m2 > 0 and year == 2026:
+            if m2 > 0 and year is not None and year >= FUNNEL_FROM_YEAR:
                 parsed_entries.append({
                     "task_id": str(t_id),
                     "task_name": t_name,
@@ -432,6 +434,7 @@ async def fetch_probability_funnel():
                     "sum": total_sum,
                     "date": date_str,
                     "month": month,
+                    "year": year,
                     "probability": probability,
                     "advance_pct": advance_pct,
                     "advance_sum": advance_sum,
@@ -439,7 +442,7 @@ async def fetch_probability_funnel():
                 })
                 task_ids_to_check.add(t_id)
 
-        print(f"DEBUG: [funnel] {len(parsed_entries)} entries with m2>0 in 2026, "
+        print(f"DEBUG: [funnel] {len(parsed_entries)} entries with m2>0 from {FUNNEL_FROM_YEAR}, "
               f"{len(task_ids_to_check)} unique tasks to check.")
 
         # 3. Add task-level fields (project/counterparty/processId) not in the analytic.
@@ -472,7 +475,10 @@ async def fetch_probability_funnel():
                 "margin_sum": (e["margin_pct"] / 100 * e["sum"]) if e["margin_pct"] is not None else None,
                 "date": e["date"],
                 "month": e["month"],
-                "month_label": f"{MONTHS_RU[e['month']]} 2026",
+                "year": e["year"],
+                # Sortable year+month key: the funnel spans several years
+                "period": e["year"] * 100 + e["month"],
+                "month_label": f"{MONTHS_RU[e['month']]} {e['year']}",
                 "probability": e["probability"],
                 "bucket": bucket_key,
                 "bucket_label": bucket_label,
